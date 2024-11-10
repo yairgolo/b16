@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="he">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>חיפוש פרטי רכב</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f5f5f5;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+        h1 {
+            color: #333;
+            font-size: 1.8em;
+        }
+        #search-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 20px 0;
+        }
+        #license-input {
+            width: 100%;
+            max-width: 300px;
+            padding: 10px;
+            font-size: 1em;
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        #search-btn {
+            padding: 10px 20px;
+            font-size: 1em;
+            color: #fff;
+            background-color: #4CAF50;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        #search-btn:hover {
+            background-color: #45a049;
+        }
+        #results-table {
+            margin-top: 20px;
+            width: 80%;
+            max-width: 600px;
+            border-collapse: collapse;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        #results-table th, #results-table td {
+            padding: 12px;
+            text-align: right;
+            border-bottom: 1px solid #ddd;
+        }
+        #results-table th {
+            background-color: #f2f2f2;
+            color: #333;
+        }
+        #results-table td {
+            background-color: #fff;
+            color: #555;
+        }
+        @media (max-width: 600px) {
+            h1 {
+                font-size: 1.5em;
+            }
+            #search-btn {
+                width: 100%;
+            }
+        }
+    </style>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<body dir="rtl">
+    <h1>חיפוש פרטי רכב</h1>
+    <div id="search-container">
+        <input type="text" id="license-input" placeholder="הכנס מספר רכב">
+        <button id="search-btn" onclick="searchCar()">חפש</button>
+        <p id="result"></p>
+    </div>
+    <table id="results-table" style="display: none;">
+        <thead>
+            <tr>
+                <th>שדה</th>
+                <th>פרטים</th>
+            </tr>
+        </thead>
+        <tbody id="results-body">
+        </tbody>
+    </table>
+
+    <script>
+        const fieldTranslations = {
+            tozeret_nm: "שם יצרן",
+            kinuy_mishari: "כינוי מסחרי",
+            ramat_gimur: "רמת גימור",
+            shnat_yitzur: "שנת ייצור",
+            moed_aliya_lakvish: "מועד עלייה לכביש",
+            degem_manoa: "דגם מנוע",
+            mivchan_acharon_dt: "מבחן אחרון",
+            tokef_dt: "תוקף מבחן",
+            neche_tag: "תו נכה",
+            baalut: "בעלות",
+            misgeret: "מספר שלדה",
+            tzeva_rechev: "צבע רכב",
+            zmig_kidmi: "צמיג קדמי",
+            zmig_ahori: "צמיג אחורי",
+            sug_delek_nm: "סוג דלק",
+        };
+
+        async function searchCar() {
+            const licenseNumber = document.getElementById("license-input").value.trim();
+            if (!licenseNumber) {
+                $('#result').text('אנא הכנס מספר רכב').css('color', '#d32f2f');
+                return;
+            }
+
+            const carApiUrl = `https://data.gov.il/api/3/action/datastore_search?resource_id=053cea08-09bc-40ec-8f7a-156f0677aff3&q=${licenseNumber}`;
+
+            try {
+                const carResponse = await fetch(carApiUrl);
+                if (!carResponse.ok) throw new Error("Error fetching data");
+
+                const carData = await carResponse.json();
+                const records = carData.result.records;
+
+                if (records.length > 0) {
+                    checkDisabledParking(licenseNumber, records[0]);
+                } else {
+                    alert("לא נמצאו פרטי רכב למספר זה.");
+                }
+            } catch (error) {
+                console.error("Error fetching car details:", error);
+                alert("שגיאה באיתור פרטי הרכב. נסה שוב מאוחר יותר.");
+            }
+        }
+
+        function checkDisabledParking(carNumber, carDetails) {
+            const data = {
+                resource_id: 'c8b9f9c8-4612-4068-934f-d4acd2e3c06e',
+                q: carNumber
+            };
+
+            $.ajax({
+                url: 'https://data.gov.il/api/3/action/datastore_search',
+                data: data,
+                dataType: 'json',
+                success: function (data) {
+                    const handicapStatus = data.success && data.result.total > 0 
+                        ? "יש תו נכה" 
+                        : "אין תו נכה";
+                    carDetails.neche_tag = handicapStatus;
+                    displayCarDetails(carDetails);
+                },
+                error: function () {
+                    $('#result').text('שגיאה בחיבור לשרת <br> אנא נסה שוב מאוחר יותר').css('color', '#d32f2f');
+                }
+            });
+        }
+
+        function displayCarDetails(carDetails) {
+            const resultsBody = document.getElementById("results-body");
+            resultsBody.innerHTML = "";
+
+            for (const [key, label] of Object.entries(fieldTranslations)) {
+                const row = document.createElement("tr");
+                const fieldCell = document.createElement("td");
+                const valueCell = document.createElement("td");
+
+                fieldCell.textContent = label;
+                valueCell.textContent = carDetails[key] || "לא זמין";
+
+                row.appendChild(fieldCell);
+                row.appendChild(valueCell);
+                resultsBody.appendChild(row);
+            }
+
+            document.getElementById("results-table").style.display = "table";
+        }
+    </script>
+</body>
+</html>
